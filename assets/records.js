@@ -3,7 +3,6 @@
   'use strict';
 
   const { SECTIONS, ESS_IDS, formatAnswer } = window.SURVEY;
-  const LOCAL_STORE_KEY = 'osaq.records.v1';
   const FIELDS = SECTIONS.flatMap((s) => s.fields);
 
   const esc = (s) =>
@@ -18,34 +17,24 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
-  function localRecords() {
-    try {
-      return JSON.parse(localStorage.getItem(LOCAL_STORE_KEY) || '[]');
-    } catch (_) {
-      return [];
-    }
-  }
-
   async function load() {
     const source = document.getElementById('source');
-    const local = localRecords();
-    try {
-      const res = await fetch('api/responses');
-      if (!res.ok) throw new Error(String(res.status));
-      const data = await res.json();
-      const serverRecords = data.records || [];
-      // 서버 기록과 이 태블릿에만 남아 있는 기록을 함께 보여 준다.
-      const serverKeys = new Set(serverRecords.map((r) => `${r.patientNo}|${r.submittedAt}`));
-      const localOnly = local.filter((r) => !serverKeys.has(`${r.patientNo}|${r.submittedAt}`)).map((r) => ({ ...r, _local: true }));
-      records = serverRecords.concat(localOnly);
-      source.textContent = `서버 ${serverRecords.length}건${localOnly.length ? ` · 이 태블릿에만 ${localOnly.length}건` : ''}`;
+    source.textContent = '불러오는 중…';
+    source.className = 'save-state';
+
+    const result = await Storage.list();
+    records = result.records.slice().sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
+
+    const place = { sheet: '구글 시트', server: '병원 서버', local: '이 태블릿' }[result.source];
+    if (result.source === 'local') {
+      source.textContent = `${place}에 남은 사본 ${records.length}건 표시 · 저장소에 연결할 수 없습니다`;
+      source.className = 'save-state is-warn';
+    } else {
+      source.textContent = `${place} ${result.remoteCount}건${result.pending ? ` · 전송 대기 ${result.pending}건` : ''}`;
       source.className = 'save-state is-ok';
-    } catch (_) {
-      records = local.map((r) => ({ ...r, _local: true }));
-      source.textContent = `서버에 연결할 수 없습니다 · 이 태블릿에 저장된 ${records.length}건 표시`;
-      source.className = 'save-state';
     }
-    records.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
+
+    document.getElementById('btnFlush').hidden = result.pending === 0;
     renderList();
   }
 
@@ -62,7 +51,7 @@
       <tbody>${records
         .map(
           (r, i) => `<tr data-row="${i}" style="cursor:pointer">
-            <td><b>${esc(r.patientNo || '-')}</b>${r._local ? ' <span class="tag">태블릿</span>' : ''}</td>
+            <td><b>${esc(r.patientNo || '-')}</b>${r._pending ? ' <span class="tag tag--warn">전송 대기</span>' : ''}</td>
             <td>${esc(fmt(r.submittedAt))}</td>
             <td>${r.bmi ?? '-'}${r.bmiCategory ? ` <span class="tag">${esc(r.bmiCategory)}</span>` : ''}</td>
             <td>${r.essTotal ?? '-'} / 24 ${r.essHigh ? '<span class="tag tag--warn">과다졸림</span>' : ''}</td>
@@ -159,6 +148,13 @@
     download(JSON.stringify(records, null, 2), 'application/json', `OSAQ_records_${today}.json`)
   );
   document.getElementById('btnReload').addEventListener('click', load);
+  document.getElementById('btnFlush').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    const { sent, pending } = await Storage.flush();
+    e.target.disabled = false;
+    alert(sent ? `${sent}건을 전송했습니다.${pending ? ` (남은 대기 ${pending}건)` : ''}` : '아직 저장소에 연결할 수 없습니다.');
+    load();
+  });
 
   load();
 })();

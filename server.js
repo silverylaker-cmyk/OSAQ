@@ -121,6 +121,12 @@ const server = http.createServer((req, res) => {
       if (!record || typeof record !== 'object' || !record.patientNo) {
         return sendJson(res, 400, { error: '환자번호가 없습니다' });
       }
+      // 통신이 끊겨 다시 보낸 경우 같은 결과가 두 번 쌓이지 않게 한다.
+      if (record.clientId) {
+        const dup = readRecords().find((r) => r.clientId === record.clientId);
+        if (dup) return sendJson(res, 200, { ok: true, id: dup.id, duplicated: true });
+      }
+
       const saved = {
         id: `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 8)}`,
         savedAt: new Date().toISOString(),

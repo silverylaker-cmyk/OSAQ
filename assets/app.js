@@ -4,7 +4,6 @@
 
   const { SECTIONS, SCALE_OPTIONS, ESS_IDS, formatAnswer } = window.SURVEY;
   const DRAFT_KEY = 'osaq.draft.v1';
-  const LOCAL_STORE_KEY = 'osaq.records.v1';
   const RESULT_STEP = SECTIONS.length;
 
   const state = {
@@ -316,16 +315,30 @@
       <button type="button" class="btn" data-act="download">JSON 내려받기</button>
       <button type="button" class="btn btn--primary" data-act="save">결과 저장</button>
     </div>`;
+    const target = Storage.useSheet() ? '구글 시트' : '이 병원 서버';
+    const pending = Storage.pendingCount();
+    showSaveStateLater(`저장 위치: ${target}${pending ? ` · 전송 대기 ${pending}건` : ''}`);
 
-    if (state.saved) showSaveState(`저장됨 · ${state.saved.where === 'server' ? '서버' : '이 태블릿(브라우저)'} · ${formatNow(state.saved.at)}`, 'ok');
+    if (state.saved) {
+      const place = { sheet: '구글 시트', server: '서버', queued: '태블릿 보관 · 전송 대기' }[state.saved.where];
+      showSaveState(`저장됨 · ${place} · ${formatNow(state.saved.at)}`, state.saved.where === 'queued' ? 'warn' : 'ok');
+    }
     window.scrollTo({ top: 0 });
+  }
+
+  function showSaveStateLater(msg) {
+    const node = document.getElementById('saveState');
+    if (node && !node.textContent) {
+      node.textContent = msg;
+      node.className = 'save-state no-print';
+    }
   }
 
   function showSaveState(msg, kind) {
     const node = document.getElementById('saveState');
     if (node) {
       node.textContent = msg;
-      node.className = `save-state no-print ${kind === 'ok' ? 'is-ok' : kind === 'err' ? 'is-err' : ''}`;
+      node.className = `save-state no-print ${kind === 'ok' ? 'is-ok' : kind === 'err' ? 'is-err' : kind === 'warn' ? 'is-warn' : ''}`;
     }
   }
 
@@ -388,29 +401,20 @@
   async function save() {
     const record = buildRecord();
     showSaveState('저장 중…', '');
-    try {
-      const res = await fetch('api/responses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(record),
-      });
-      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
-      const data = await res.json();
-      state.saved = { where: 'server', at: record.submittedAt };
-      showSaveState(`서버에 저장되었습니다 · 기록번호 ${data.id} · ${formatNow(record.submittedAt)}`, 'ok');
+    const result = await Storage.save(record);
+    if (result.ok) {
+      state.saved = { where: result.where, at: record.submittedAt };
+      const place = result.where === 'sheet' ? '구글 시트' : '서버';
+      showSaveState(`${place}에 저장되었습니다 · ${formatNow(record.submittedAt)}`, 'ok');
       localStorage.removeItem(DRAFT_KEY);
-    } catch (err) {
-      // 서버가 없거나 통신에 실패하면 태블릿 브라우저에 보관한다.
-      try {
-        const list = JSON.parse(localStorage.getItem(LOCAL_STORE_KEY) || '[]');
-        list.push(record);
-        localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(list));
-        state.saved = { where: 'local', at: record.submittedAt };
-        showSaveState(`서버에 연결할 수 없어 이 태블릿에 저장했습니다 (${list.length}건 보관 중) · ${formatNow(record.submittedAt)}`, 'ok');
-        localStorage.removeItem(DRAFT_KEY);
-      } catch (e2) {
-        showSaveState(`저장에 실패했습니다: ${err.message}. JSON 내려받기로 결과를 보관해 주세요.`, 'err');
-      }
+    } else {
+      // 연결이 끊겨도 결과는 태블릿에 대기열로 남고, 연결되면 자동으로 전송된다.
+      state.saved = { where: 'queued', at: record.submittedAt };
+      showSaveState(
+        `연결이 되지 않아 태블릿에 보관했습니다 (전송 대기 ${result.pending}건) · 인터넷이 연결되면 자동으로 전송됩니다`,
+        'warn'
+      );
+      localStorage.removeItem(DRAFT_KEY);
     }
   }
 

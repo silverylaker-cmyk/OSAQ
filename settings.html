@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>저장 위치 설정</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ctext y=%2726%27 font-size=%2726%27%3E%F0%9F%9B%8C%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar no-print">
+    <div class="topbar__inner">
+      <div>
+        <div class="topbar__title">저장 위치 설정</div>
+        <div class="topbar__sub">설문 결과를 어디에 모을지 정합니다</div>
+      </div>
+      <div class="topbar__meta">
+        <a href="index.html" style="font-size:14px;color:#2563eb;font-weight:700">설문으로</a>
+        <a href="records.html" style="font-size:14px;color:#7d8ca1;margin-left:10px">저장된 기록</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="card">
+      <span class="sec-no">현재 저장 위치</span>
+      <h1 class="sec-title" id="modeTitle">확인 중…</h1>
+      <p class="sec-desc" id="modeDesc"></p>
+
+      <div class="q">
+        <label class="q__label">구글 시트 웹앱 주소 (Apps Script 배포 URL)
+          <span class="q__help">비워 두면 같은 네트워크의 병원 서버(server.js)에 저장합니다. 입력하면 구글 시트에 저장되어 서버 PC를 켜 둘 필요가 없습니다.</span>
+        </label>
+        <div class="field">
+          <input class="field__input" id="gasUrl" type="url" style="max-width:100%"
+                 placeholder="https://script.google.com/macros/s/…/exec" inputmode="url">
+        </div>
+      </div>
+
+      <div class="q">
+        <label class="q__label">암호(토큰)
+          <span class="q__help">Apps Script 코드의 <code>TOKEN</code> 값과 똑같이 입력하세요.</span>
+        </label>
+        <div class="field">
+          <input class="field__input" id="token" type="text" placeholder="osaq-2026-changeme">
+        </div>
+      </div>
+
+      <div class="toolbar" style="margin-top:18px">
+        <button type="button" class="btn btn--primary" id="btnSave" style="flex:0 0 auto">저장</button>
+        <button type="button" class="btn" id="btnTest">연결 테스트</button>
+        <button type="button" class="btn btn--ghost" id="btnClear">구글 시트 연결 해제</button>
+      </div>
+      <div id="testState" class="save-state" style="margin-top:6px"></div>
+
+      <div class="q" style="border-bottom:0">
+        <label class="q__label">전송 대기 중인 결과</label>
+        <div class="toolbar">
+          <span class="save-state" id="pending"></span>
+          <button type="button" class="btn" id="btnFlush">지금 전송</button>
+        </div>
+      </div>
+
+      <div class="disclaimer">
+        <b>구글 시트로 저장하려면</b><br>
+        ① 구글 드라이브에서 새 스프레드시트 만들기 → ② 확장 프로그램 › Apps Script → ③ 저장소의
+        <code>google-apps-script/Code.gs</code> 내용을 붙여넣고 <code>TOKEN</code>을 바꾸기 →
+        ④ 배포 › 새 배포 › 웹 앱 (실행: 나, 액세스 권한: <b>모든 사용자</b>) → ⑤ 나온 <code>/exec</code> 주소를 위에 붙여넣기.<br>
+        자세한 순서는 README.md의 "구글 시트에 저장하기"에 있습니다.
+      </div>
+
+      <div class="disclaimer" style="background:#fff5e6;color:#b45309">
+        환자 응답은 진료 정보에 해당합니다. 병원(기관) 구글 계정을 쓰고, 시트 공유 범위를 담당자만으로 제한하며,
+        개인 계정·공용 링크 공유는 피해 주세요.
+      </div>
+    </div>
+  </main>
+
+  <script src="assets/schema.js"></script>
+  <script src="assets/storage.js"></script>
+  <script src="assets/settings.js"></script>
+</body>
+</html>

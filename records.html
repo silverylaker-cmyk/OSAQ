@@ -14,7 +14,8 @@
         <div class="topbar__title">저장된 설문 기록</div>
         <div class="topbar__sub">수면무호흡 원인 평가 설문지 · PART A</div>
       </div>
-      <div class="topbar__meta"><a href="index.html" style="font-size:14px;color:#2563eb;font-weight:700">＋ 새 설문</a></div>
+      <div class="topbar__meta"><a href="index.html" style="font-size:14px;color:#2563eb;font-weight:700">＋ 새 설문</a>
+        <a href="settings.html" style="font-size:13px;color:#7d8ca1;margin-left:10px">설정</a></div>
     </div>
   </header>
 
@@ -24,6 +25,7 @@
         <button type="button" class="btn" id="btnCsv">CSV 내려받기</button>
         <button type="button" class="btn" id="btnJson">JSON 내려받기</button>
         <button type="button" class="btn btn--ghost" id="btnReload">새로고침</button>
+        <button type="button" class="btn" id="btnFlush" hidden>전송 대기분 보내기</button>
         <span class="save-state" id="source"></span>
       </div>
       <div id="list"></div>
@@ -31,6 +33,7 @@
   </main>
 
   <script src="assets/schema.js"></script>
+  <script src="assets/storage.js"></script>
   <script src="assets/records.js"></script>
 </body>
 </html>

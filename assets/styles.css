@@ -256,6 +256,8 @@ button, input, select { font: inherit; color: inherit; }
 .save-state { font-size: 14px; font-weight: 700; }
 .save-state.is-ok { color: var(--ok); }
 .save-state.is-err { color: var(--danger); }
+.save-state.is-warn { color: var(--warn); }
+.save-state a { color: var(--brand); }
 
 .disclaimer {
   margin-top: 22px; padding: 14px 16px; border-radius: 12px;
