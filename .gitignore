@@ -1,0 +1,4 @@
+# 환자 응답 데이터는 저장소에 올리지 않습니다.
+data/*.jsonl
+node_modules/
+.DS_Store

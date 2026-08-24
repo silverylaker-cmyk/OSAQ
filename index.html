@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>수면무호흡 원인 평가 설문지</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ctext y=%2726%27 font-size=%2726%27%3E%F0%9F%9B%8C%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar no-print">
+    <div class="topbar__inner">
+      <div>
+        <div class="topbar__title">수면무호흡 원인 평가 설문지</div>
+        <div class="topbar__sub">PART A · 환자 작성</div>
+      </div>
+      <div class="topbar__meta">
+        <div class="topbar__pid" id="topPid"></div>
+        <button type="button" class="btn btn--ghost" data-act="reset" style="min-height:36px;padding:0 12px;font-size:13px;margin-top:4px">새 환자</button>
+        <a href="records.html" style="font-size:13px;color:#7d8ca1;margin-left:8px">저장된 기록</a>
+      </div>
+    </div>
+    <div class="progress">
+      <div class="progress__track"><div class="progress__bar" id="progressBar"></div></div>
+      <div class="progress__steps" id="progressSteps"></div>
+    </div>
+  </header>
+
+  <main class="wrap" id="app"></main>
+  <nav class="navbar no-print" id="nav"></nav>
+
+  <script src="assets/schema.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
