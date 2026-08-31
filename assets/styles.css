@@ -270,6 +270,20 @@ button, input, select { font: inherit; color: inherit; }
 .resume__acts { display: flex; gap: 10px; flex-wrap: wrap; }
 .resume__acts .btn { min-height: 48px; padding: 0 18px; }
 
+/* 진단 도움말 */
+.panel-help {
+  margin-top: 14px; padding: 16px 18px; border-radius: 12px;
+  border: 1px solid var(--line); background: #fbfcfe; font-size: 14.5px;
+}
+.panel-help__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.panel-help__head b { flex: 1 1 auto; font-size: 15px; }
+.panel-help__head .btn { min-height: 44px; padding: 0 16px; }
+.panel-help p { margin: 0 0 12px; color: var(--ink-2); }
+.help-table { width: 100%; border-collapse: collapse; }
+.help-table td { padding: 9px 8px; border-top: 1px solid var(--line-2); vertical-align: top; line-height: 1.55; }
+.help-table td:first-child { width: 38%; font-weight: 600; }
+.help-table code { font-size: 13px; background: var(--line-2); padding: 1px 5px; border-radius: 4px; }
+
 /* 연결 진단 결과 */
 .diag { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .diag__item {

@@ -362,24 +362,49 @@
       add('웹 앱 주소 형식', false, '보통은 https://script.google.com/macros/s/…/exec 형태입니다. 시트 주소나 /dev(테스트) 주소가 아닌지 확인해 주세요.');
     }
 
-    // ① 일반 요청
+    const pingUrl = withParams(url, { action: 'ping', token: target.token || '' });
+
+    // ① 구글 서버까지 닿기는 하는지 (응답 내용은 읽지 않는 방식이라 차단 정책과 무관하게 확인된다)
+    let reachable = false;
+    try {
+      await fetch(pingUrl, { mode: 'no-cors', redirect: 'follow' });
+      reachable = true;
+      add('구글 서버 도달', true, '구글까지는 연결됩니다');
+    } catch (err) {
+      add('구글 서버 도달', false, '구글에 접속하지 못했습니다. 이 태블릿의 인터넷 연결, 또는 병원 네트워크에서 script.google.com 차단 여부를 확인해 주세요.');
+    }
+
+    // ② 일반 요청
     let direct = null;
     try {
-      const res = await fetch(withParams(url, { action: 'ping', token: target.token || '' }), { redirect: 'follow' });
+      const res = await fetch(pingUrl, { redirect: 'follow' });
       direct = await res.json();
       add('일반 연결', true, `구글이 응답했습니다 (HTTP ${res.status})`);
     } catch (err) {
       add('일반 연결', false, `막혔습니다 (${err.message}) — 우회 방식으로 다시 시도합니다`);
     }
 
-    // ② JSONP 우회
+    // ③ JSONP 우회
     let viaJsonp = null;
     if (!direct) {
       try {
-        viaJsonp = await jsonp(withParams(url, { action: 'ping', token: target.token || '' }));
+        viaJsonp = await jsonp(pingUrl, 12000); // 진단은 오래 기다리지 않는다
         add('우회 연결', true, '우회 방식으로 구글에 연결했습니다');
       } catch (err) {
-        add('우회 연결', false, `${err.message} — 배포가 '모든 사용자'로 되어 있는지, 코드 수정 후 '새 버전'으로 다시 배포했는지 확인해 주세요.`);
+        add('우회 연결', false, err.message);
+        // 어디까지 갔는지에 따라 원인을 좁혀 준다.
+        if (reachable) {
+          add(
+            '무엇이 문제인가',
+            false,
+            '구글까지는 닿았지만 스크립트가 설문 프로그램이 읽을 수 있는 답을 주지 않았습니다. ' +
+              '거의 대부분 <b>배포 설정</b> 문제입니다. ① 배포 › 배포 관리 › ✏️ › 버전 <b>새 버전</b> › 배포 로 다시 배포했는지, ' +
+              '② 그때 액세스 권한이 <b>모든 사용자</b>인지, ③ 처음 배포할 때 <b>권한 승인(고급 › 이동 › 허용)</b>을 끝냈는지 확인해 주세요. ' +
+              '아래 <b>[구글 응답 직접 보기]</b>를 누르면 구글이 실제로 무엇을 돌려주는지 눈으로 확인할 수 있습니다.'
+          );
+        } else {
+          add('무엇이 문제인가', false, '구글 서버에 아예 닿지 못했습니다. 네트워크 문제이거나 주소가 잘못된 경우입니다. 다른 인터넷(휴대폰 핫스팟 등)으로 바꿔서 다시 시도해 보세요.');
+        }
         return steps;
       }
     }
@@ -401,8 +426,14 @@
     }, 1500);
   }
 
+  /** 브라우저에서 직접 열어 구글의 실제 응답을 확인할 주소 */
+  function pingUrl(cfg) {
+    const target = cfg && cfg.gasUrl ? cfg : getConfig();
+    return withParams(target.gasUrl, { action: 'ping', token: target.token || '' });
+  }
+
   global.Storage = {
-    getConfig, setConfig, useSheet, save, flush, list, test, diagnose,
+    getConfig, setConfig, useSheet, save, flush, list, test, diagnose, pingUrl,
     pendingCount, sheetColumns, localTime, newClientId,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
