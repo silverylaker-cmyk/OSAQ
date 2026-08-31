@@ -63,9 +63,13 @@
 웹 앱 주소는 계정 종류에 따라 두 가지 형태가 있으며, **둘 다 정상**입니다.
 
 ```
-개인 구글 계정      https://script.google.com/macros/s/<ID>/exec
-조직(병원) 계정     https://script.google.com/a/macros/<도메인>/s/<ID>/exec
+개인 구글 계정        https://script.google.com/macros/s/<ID>/exec
+계정 여러 개 로그인   https://script.google.com/u/0/macros/s/<ID>/exec
+조직(병원) 계정       https://script.google.com/a/macros/<도메인>/s/<ID>/exec
 ```
+
+주소를 다시 확인하려면 **배포 › 배포 관리** 에서 활성 배포의 **웹 앱** 항목에 있는 주소를 복사하세요.
+(편집기 주소나 시트 주소가 아닙니다.)
 
 `/dev` 로 끝나는 주소(테스트 배포)는 만든 본인만 열 수 있어 태블릿에서는 동작하지 않습니다.
 

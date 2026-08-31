@@ -167,11 +167,13 @@
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  /* 웹 앱 주소는 계정 종류에 따라 두 가지 형태가 있다.
-   *   개인 계정   https://script.google.com/macros/s/<ID>/exec
+  /* 웹 앱 주소 형태 (모두 정상)
+   *   개인 계정            https://script.google.com/macros/s/<ID>/exec
+   *   계정 여러 개 로그인   https://script.google.com/u/0/macros/s/<ID>/exec
    *   조직(회사·병원) 계정  https://script.google.com/a/macros/<도메인>/s/<ID>/exec
+   *   뒤에 ?무엇=값 이 붙어 있어도 동작한다.
    */
-  const GAS_EXEC = /^https:\/\/script\.google\.com\/(macros\/s\/[^/]+|a\/macros\/[^/]+\/s\/[^/]+)\/exec$/;
+  const GAS_EXEC = /^https:\/\/script\.google\.com\/(u\/\d+\/)?(macros\/s\/[^/]+|a\/macros\/[^/]+\/s\/[^/]+)\/exec(\?.*)?$/;
 
   /** 주소가 잘못됐다면 무엇이 잘못됐는지 알려 준다 (정상이면 null) */
   function urlProblem(input) {
@@ -186,7 +188,7 @@
       return '<b>/dev 로 끝나는 테스트 주소</b>입니다. 이 주소는 본인만 열 수 있어 태블릿에서는 동작하지 않습니다. <b>/exec</b> 로 끝나는 주소를 넣어 주세요.';
     if (!/^https:\/\/script\.google\.com\//.test(url))
       return '<b>script.google.com</b> 으로 시작하는 주소가 아닙니다. 배포 후 나온 웹 앱 주소를 다시 복사해 주세요.';
-    if (!/\/exec$/.test(url)) return '주소가 <b>/exec</b> 로 끝나야 합니다. 뒤에 붙은 글자가 없는지 확인해 주세요.';
+    if (!/\/exec(\?|$)/.test(url)) return '주소가 <b>/exec</b> 로 끝나야 합니다. 배포 › 배포 관리 에서 <b>웹 앱</b> 항목의 주소를 복사해 주세요.';
     return '주소 형태가 예상과 다릅니다. 배포 후 나온 웹 앱 주소를 그대로 복사해 주세요.';
   }
 
@@ -380,7 +382,7 @@
     }
     const problem = urlProblem(url);
     if (!problem) {
-      add('웹 앱 주소 형식', true, url.includes('/a/macros/') ? '올바른 형식입니다 (조직 계정 주소)' : '올바른 형식입니다');
+      add('웹 앱 주소 형식', true, url.includes('/a/macros/') ? '올바른 형식입니다 (조직 계정 주소)' : '올바른 형식입니다 (개인 계정 주소)');
     } else {
       // 형식이 달라도 연결은 시도해 본다 — 어디까지 되는지 보여 주는 편이 도움이 된다.
       add('웹 앱 주소 형식', false, problem);
