@@ -131,6 +131,39 @@
     refresh();
   });
 
+  /* 설정 링크 — PC에서 만든 주소·암호를 태블릿에 손으로 옮겨 적지 않도록.
+   * 값은 주소의 # 뒤에 담기므로 서버 기록에는 남지 않는다. */
+  function buildSetupLink() {
+    const params = new URLSearchParams({ gasUrl: $('gasUrl').value.trim(), token: $('token').value.trim() });
+    return `${location.origin}${location.pathname}#setup=${encodeURIComponent(params.toString())}`;
+  }
+
+  $('btnLink').addEventListener('click', async () => {
+    const link = buildSetupLink();
+    try {
+      await navigator.clipboard.writeText(link);
+      state('설정 링크를 복사했습니다. 태블릿으로 보내서 열면 주소와 암호가 자동으로 입력됩니다.', 'is-ok');
+    } catch (_) {
+      // 클립보드를 쓸 수 없는 브라우저에서는 링크를 직접 보여 준다.
+      $('testState').innerHTML =
+        '<span class="save-state">아래 링크를 복사해 태블릿으로 보내세요.</span>' +
+        `<textarea readonly rows="3" style="width:100%;margin-top:8px;font-size:13px">${link}</textarea>`;
+    }
+  });
+
+  /* 태블릿에서 설정 링크로 열었을 때 자동으로 채워 넣는다 */
+  function applySetupLink() {
+    const hash = location.hash || '';
+    if (!hash.startsWith('#setup=')) return;
+    const params = new URLSearchParams(decodeURIComponent(hash.slice('#setup='.length)));
+    const gasUrl = (params.get('gasUrl') || '').trim();
+    const token = (params.get('token') || '').trim();
+    if (!gasUrl && !token) return;
+    Storage.setConfig({ gasUrl, token });
+    history.replaceState(null, '', location.pathname); // 주소창에 암호가 남지 않도록 지운다
+    state('링크에서 주소와 암호를 받아 저장했습니다. 연결 테스트로 확인해 보세요.', 'is-ok');
+  }
+
   $('btnFlush').addEventListener('click', async (e) => {
     e.target.disabled = true;
     state('전송 중…', '');
@@ -140,5 +173,6 @@
     refresh();
   });
 
+  applySetupLink();
   refresh();
 })();
