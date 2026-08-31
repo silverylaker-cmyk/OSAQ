@@ -11,13 +11,15 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { SECTIONS, formatAnswer } = require('./assets/schema.js');
+const { SECTIONS, formatAnswer, sheetColumns } = require('./assets/schema.js');
 
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'responses.jsonl');
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const SENT_FILE = path.join(DATA_DIR, 'sent-to-sheet.json');
 const MAX_BODY = 256 * 1024; // 설문 1건은 수 KB. 그 이상은 거부한다.
 
 const MIME = {
@@ -45,6 +47,111 @@ function readRecords() {
       }
     })
     .filter(Boolean);
+}
+
+/* ── 구글 시트 중계 ───────────────────────────────
+ * 태블릿에서 구글에 연결되지 않는 경우, 태블릿은 이 서버에만 저장하고
+ * 구글 시트로는 서버가 대신 보낸다. (서버에서는 브라우저 제약이 없다)
+ */
+function readConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+  } catch (_) {
+    return { gasUrl: '', token: '' };
+  }
+}
+
+function writeConfig(cfg) {
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ gasUrl: cfg.gasUrl || '', token: cfg.token || '' }, null, 2), 'utf8');
+}
+
+function readSent() {
+  try {
+    return new Set(JSON.parse(fs.readFileSync(SENT_FILE, 'utf8')));
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function markSent(clientId) {
+  const sent = readSent();
+  sent.add(clientId);
+  fs.writeFileSync(SENT_FILE, JSON.stringify([...sent]), 'utf8');
+}
+
+function localTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+let lastRelayError = '';
+
+async function sendToSheet(record) {
+  const { gasUrl, token } = readConfig();
+  if (!gasUrl) return { skipped: true };
+
+  const cols = sheetColumns(localTime);
+  const payload = {
+    token,
+    clientId: record.clientId || record.id,
+    headers: cols.map((c) => c.k),
+    values: cols.map((c) => {
+      const v = c.get(record);
+      return v === undefined || v === null ? '' : v;
+    }),
+    record,
+  };
+
+  const res = await fetch(gasUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+    redirect: 'follow',
+  });
+  if (!res.ok) throw new Error(`구글 시트 응답 ${res.status}`);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || '구글 시트가 저장을 거부했습니다');
+  return data;
+}
+
+/** 아직 시트로 보내지 못한 결과를 모두 전송한다 */
+async function flushToSheet() {
+  const { gasUrl } = readConfig();
+  if (!gasUrl) return { sent: 0, pending: 0 };
+
+  const sent = readSent();
+  const waiting = readRecords().filter((r) => !sent.has(r.clientId || r.id));
+  let done = 0;
+  for (const record of waiting) {
+    try {
+      await sendToSheet(record);
+      markSent(record.clientId || record.id);
+      lastRelayError = '';
+      done += 1;
+      console.log(`[시트 전송] 환자번호 ${record.patientNo}`);
+    } catch (err) {
+      lastRelayError = err.message;
+      console.log(`[시트 전송 실패] ${err.message} — 나중에 다시 시도합니다`);
+      break;
+    }
+  }
+  return { sent: done, pending: waiting.length - done };
+}
+
+function relayStatus() {
+  const { gasUrl, token } = readConfig();
+  const sent = readSent();
+  const all = readRecords();
+  return {
+    gasUrl,
+    hasToken: Boolean(token),
+    total: all.length,
+    sentCount: all.filter((r) => sent.has(r.clientId || r.id)).length,
+    pending: all.filter((r) => !sent.has(r.clientId || r.id)).length,
+    lastError: lastRelayError,
+  };
 }
 
 function sendJson(res, status, payload) {
@@ -139,7 +246,51 @@ const server = http.createServer((req, res) => {
       }
       console.log(`[저장] 환자번호 ${saved.patientNo} · ESS ${saved.essTotal} · id ${saved.id}`);
       sendJson(res, 201, { ok: true, id: saved.id });
+      // 구글 시트가 설정돼 있으면 서버가 대신 전송한다 (응답을 지연시키지 않는다).
+      flushToSheet().catch(() => {});
     });
+    return;
+  }
+
+  if (pathname === '/api/relay' && req.method === 'GET') {
+    return sendJson(res, 200, relayStatus());
+  }
+
+  if (pathname === '/api/relay' && (req.method === 'POST' || req.method === 'PUT')) {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', async () => {
+      let cfg;
+      try {
+        cfg = JSON.parse(body);
+      } catch (_) {
+        return sendJson(res, 400, { error: 'JSON 형식이 올바르지 않습니다' });
+      }
+      writeConfig(cfg);
+      lastRelayError = '';
+      if (cfg.gasUrl) {
+        try {
+          // 설정하자마자 연결을 확인하고, 밀린 결과가 있으면 함께 보낸다.
+          const url = `${cfg.gasUrl}${cfg.gasUrl.includes('?') ? '&' : '?'}action=ping&token=${encodeURIComponent(cfg.token || '')}`;
+          const ping = await fetch(url, { redirect: 'follow' });
+          const data = await ping.json();
+          if (!data.ok) throw new Error(data.error || '연결에 실패했습니다');
+          const flushed = await flushToSheet();
+          return sendJson(res, 200, { ok: true, sheetName: data.sheetName, count: data.count, ...flushed });
+        } catch (err) {
+          lastRelayError = err.message;
+          return sendJson(res, 200, { ok: false, error: err.message });
+        }
+      }
+      sendJson(res, 200, { ok: true, cleared: true });
+    });
+    return;
+  }
+
+  if (pathname === '/api/relay/flush' && req.method === 'POST') {
+    flushToSheet()
+      .then((r) => sendJson(res, 200, { ok: true, ...r, lastError: lastRelayError }))
+      .catch((err) => sendJson(res, 200, { ok: false, error: err.message }));
     return;
   }
 
@@ -166,4 +317,11 @@ server.listen(PORT, HOST, () => {
   console.log(`  로컬:    http://localhost:${PORT}`);
   console.log(`  태블릿:  http://<이 PC의 IP 주소>:${PORT}`);
   console.log(`  저장 위치: ${DATA_FILE}`);
+  const { gasUrl } = readConfig();
+  if (gasUrl) {
+    console.log('  구글 시트 중계: 켜짐 — 서버가 결과를 시트로 대신 보냅니다');
+    flushToSheet().catch(() => {});
+    // 인터넷이 잠시 끊겨도 계속 재시도한다.
+    setInterval(() => flushToSheet().catch(() => {}), 60000);
+  }
 });

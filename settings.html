@@ -65,6 +65,20 @@
         </div>
       </div>
 
+      <div class="q" id="relayBox" hidden style="border-bottom:0">
+        <label class="q__label">서버가 대신 구글 시트로 보내기
+          <span class="q__help">태블릿에서 구글에 연결되지 않을 때 쓰는 방법입니다.
+            태블릿은 병원 서버에만 저장하고, 서버가 구글 시트로 대신 전송합니다.
+            서버가 꺼져 있던 동안의 결과도 다시 켜지면 자동으로 밀어 넣습니다.</span>
+        </label>
+        <div class="toolbar">
+          <button type="button" class="btn btn--primary" id="btnRelayOn" style="flex:0 0 auto">이 방식으로 설정</button>
+          <button type="button" class="btn" id="btnRelayFlush">밀린 결과 보내기</button>
+          <button type="button" class="btn btn--ghost" id="btnRelayOff">서버 전송 끄기</button>
+        </div>
+        <div id="relayState" class="save-state" style="margin-top:6px"></div>
+      </div>
+
       <div class="disclaimer">
         <b>태블릿에 옮길 때</b><br>
         주소를 손으로 옮겨 적으면 한 글자만 틀려도 "요청한 파일이 없습니다" 오류가 납니다.

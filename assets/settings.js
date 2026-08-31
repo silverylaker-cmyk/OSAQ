@@ -187,6 +187,79 @@
     refresh();
   });
 
+  /* ── 서버가 대신 구글 시트로 보내는 방식 ─────────────
+   * 태블릿에서 구글 접속이 막히는 환경을 위한 우회 경로.
+   * 태블릿 → 병원 서버(로컬) → 구글 시트(서버가 전송)
+   */
+  async function relayRefresh() {
+    try {
+      const res = await fetch('api/relay');
+      if (!res.ok) throw new Error(String(res.status));
+      const st = await res.json();
+      $('relayBox').hidden = false;
+      const on = Boolean(st.gasUrl);
+      $('relayState').className = `save-state ${on ? (st.lastError ? 'is-warn' : 'is-ok') : ''}`;
+      $('relayState').textContent = on
+        ? `켜짐 · 시트로 보낸 결과 ${st.sentCount}건${st.pending ? ` · 전송 대기 ${st.pending}건` : ''}` +
+          ` · 서버에 등록된 주소 …${st.gasUrl.slice(-16)}` +
+          (st.lastError ? ` · 마지막 오류: ${st.lastError}` : '')
+        : '꺼짐 — 결과가 서버에만 저장됩니다';
+      $('btnRelayFlush').hidden = !on || !st.pending;
+      $('btnRelayOff').hidden = !on;
+    } catch (_) {
+      // 서버 없이 열린 경우(파일로 열기 등)에는 이 기능을 감춘다.
+      $('relayBox').hidden = true;
+    }
+  }
+
+  async function relaySet(cfg) {
+    $('relayState').textContent = '서버에 설정하는 중…';
+    $('relayState').className = 'save-state';
+    try {
+      const res = await fetch('api/relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      });
+      const data = await res.json();
+      if (data.ok === false) {
+        $('relayState').textContent = `서버가 구글 시트에 연결하지 못했습니다: ${data.error}`;
+        $('relayState').className = 'save-state is-err';
+        return;
+      }
+      if (cfg.gasUrl) {
+        // 이제 태블릿은 서버에만 저장하면 되므로, 태블릿의 구글 시트 설정은 비운다.
+        Storage.setConfig({ gasUrl: '', token: '' });
+        state(`설정했습니다. 이제 태블릿은 병원 서버에 저장하고, 서버가 구글 시트로 보냅니다.${
+          data.sent ? ` (밀려 있던 ${data.sent}건 전송 완료)` : ''
+        }`, 'is-ok');
+      } else {
+        state('서버의 구글 시트 전송을 껐습니다.', 'is-ok');
+      }
+      refresh();
+    } catch (err) {
+      $('relayState').textContent = `서버에 설정하지 못했습니다: ${err.message}`;
+      $('relayState').className = 'save-state is-err';
+    }
+    relayRefresh();
+  }
+
+  $('btnRelayOn').addEventListener('click', () =>
+    relaySet({ gasUrl: $('gasUrl').value.trim(), token: $('token').value.trim() })
+  );
+  $('btnRelayOff').addEventListener('click', () => relaySet({ gasUrl: '', token: '' }));
+  $('btnRelayFlush').addEventListener('click', async () => {
+    $('relayState').textContent = '전송 중…';
+    const res = await fetch('api/relay/flush', { method: 'POST' });
+    const data = await res.json();
+    $('relayState').textContent = data.sent
+      ? `${data.sent}건을 시트로 보냈습니다.${data.pending ? ` (남은 대기 ${data.pending}건)` : ''}`
+      : `보내지 못했습니다: ${data.lastError || data.error || '연결 실패'}`;
+    $('relayState').className = `save-state ${data.sent ? 'is-ok' : 'is-err'}`;
+    relayRefresh();
+  });
+
   applySetupLink();
   refresh();
+  relayRefresh();
 })();

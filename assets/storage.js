@@ -47,20 +47,7 @@
   }
 
   /* 시트의 열 순서 = 설문 문항 순서. 결과 화면·CSV와 같은 정의를 쓴다. */
-  function sheetColumns() {
-    const { SECTIONS, formatAnswer } = global.SURVEY;
-    const fields = SECTIONS.flatMap((s) => s.fields).filter((f) => f.id !== 'patientNo');
-    return [
-      { k: '작성일시', get: (r) => localTime(r.submittedAt) },
-      { k: '환자번호', get: (r) => r.patientNo },
-      { k: 'BMI', get: (r) => r.bmi },
-      { k: 'BMI 분류', get: (r) => r.bmiCategory },
-      { k: '목치수(cm)', get: (r) => r.neckCm },
-      { k: 'Epworth 합계', get: (r) => r.essTotal },
-    ]
-      .concat(fields.map((f) => ({ k: f.short || f.label, get: (r) => formatAnswer(f, r.answers || {}) })))
-      .concat([{ k: '참고 소견', get: (r) => (r.findings || []).join(' | ') }]);
-  }
+  const sheetColumns = () => global.SURVEY.sheetColumns(localTime);
 
   function localTime(iso) {
     if (!iso) return '';

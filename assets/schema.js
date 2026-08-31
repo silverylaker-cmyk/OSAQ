@@ -245,7 +245,22 @@
     return String(v);
   }
 
-  global.SURVEY = { SECTIONS, SCALE_OPTIONS, ESS_IDS, formatAnswer };
+  /* 구글 시트의 열 구성 — 태블릿이 직접 보낼 때와 서버가 대신 보낼 때가 같아야 하므로 여기 둔다 */
+  function sheetColumns(formatTime) {
+    const fields = SECTIONS.flatMap((s) => s.fields).filter((f) => f.id !== 'patientNo');
+    return [
+      { k: '작성일시', get: (r) => formatTime(r.submittedAt) },
+      { k: '환자번호', get: (r) => r.patientNo },
+      { k: 'BMI', get: (r) => r.bmi },
+      { k: 'BMI 분류', get: (r) => r.bmiCategory },
+      { k: '목치수(cm)', get: (r) => r.neckCm },
+      { k: 'Epworth 합계', get: (r) => r.essTotal },
+    ]
+      .concat(fields.map((f) => ({ k: f.short || f.label, get: (r) => formatAnswer(f, r.answers || {}) })))
+      .concat([{ k: '참고 소견', get: (r) => (r.findings || []).join(' | ') }]);
+  }
+
+  global.SURVEY = { SECTIONS, SCALE_OPTIONS, ESS_IDS, formatAnswer, sheetColumns };
   // 서버(server.js)에서도 같은 문항 정의로 CSV 열 순서를 만든다.
   if (typeof module !== 'undefined' && module.exports) module.exports = global.SURVEY;
 })(typeof window !== 'undefined' ? window : globalThis);
