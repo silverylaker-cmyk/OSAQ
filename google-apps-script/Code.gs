@@ -20,6 +20,25 @@ var SHEET_NAME = '설문결과';
 var RAW_HEADER = '원본데이터(JSON)';
 var ID_HEADER = '기록번호';
 
+/**
+ * 권한 승인을 (다시) 받을 때 실행하는 함수입니다.
+ *
+ * Apps Script 편집기 위쪽 함수 목록에서 approveAndTest 를 고르고 ▷실행 을 누르세요.
+ *   · 승인 창이 뜨면 계정 선택 → "확인되지 않았습니다" 화면에서 고급 › 이동 › 허용
+ *   · 아래쪽 실행 로그에 "준비 완료" 가 찍히면 승인과 설정이 끝난 것입니다.
+ * 승인을 마친 뒤에는 배포 › 배포 관리 › ✏️ › 버전 '새 버전' › 배포 로 다시 배포하세요.
+ */
+function approveAndTest() {
+  var sheet = getSheet(); // 시트 접근 권한을 실제로 사용해 승인 창을 띄웁니다.
+  var name = SpreadsheetApp.getActiveSpreadsheet().getName();
+  var rows = Math.max(0, sheet.getLastRow() - 1);
+  var message =
+    '준비 완료 — 스프레드시트 "' + name + '" · 시트 "' + sheet.getName() + '" · 저장된 결과 ' + rows + '건' +
+    ' · 암호(TOKEN) "' + TOKEN + '"';
+  Logger.log(message);
+  return message;
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
