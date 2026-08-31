@@ -453,6 +453,19 @@
     }, 1500);
   }
 
+  /** 두 기기에 들어간 주소가 정말 같은지 눈으로 비교하기 위한 짧은 확인코드 */
+  function urlFingerprint(input) {
+    const url = (input || '').trim();
+    if (!url) return null;
+    let hash = 5381;
+    for (let i = 0; i < url.length; i++) hash = ((hash * 33) ^ url.charCodeAt(i)) >>> 0;
+    return {
+      length: url.length,
+      code: hash.toString(16).toUpperCase().padStart(8, '0'),
+      tail: url.slice(-8),
+    };
+  }
+
   /** 브라우저에서 직접 열어 구글의 실제 응답을 확인할 주소 */
   function pingUrl(cfg) {
     const target = cfg && cfg.gasUrl ? cfg : getConfig();
@@ -460,7 +473,7 @@
   }
 
   global.Storage = {
-    getConfig, setConfig, useSheet, save, flush, list, test, diagnose, pingUrl, urlProblem,
+    getConfig, setConfig, useSheet, save, flush, list, test, diagnose, pingUrl, urlProblem, urlFingerprint,
     pendingCount, sheetColumns, localTime, newClientId,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

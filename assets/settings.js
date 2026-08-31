@@ -15,6 +15,13 @@
       ? '결과가 구글 시트에 바로 쌓입니다. 서버 PC를 켜 둘 필요가 없고, 시트에서 엑셀(.xlsx)로 내려받을 수 있습니다.'
       : '같은 네트워크의 서버 PC에 저장합니다. 서버가 꺼져 있으면 태블릿에 보관했다가 켜졌을 때 전송합니다.';
 
+    // 주소 확인코드 — PC와 태블릿에서 같은 값이면 주소가 완전히 같다는 뜻이다.
+    const fp = Storage.urlFingerprint($('gasUrl').value);
+    $('fingerprint').innerHTML = fp
+      ? `주소 확인코드 <b>${fp.code}</b> · 길이 ${fp.length}자 · 끝 8자 <code>${fp.tail}</code>
+         <span class="q__help">PC와 태블릿에서 이 값이 다르면 주소가 서로 다른 것입니다.</span>`
+      : '';
+
     const pending = Storage.pendingCount();
     $('pending').textContent = pending ? `${pending}건이 전송을 기다리고 있습니다` : '대기 중인 결과가 없습니다';
     $('pending').className = `save-state ${pending ? 'is-warn' : 'is-ok'}`;
@@ -25,6 +32,13 @@
     $('testState').textContent = msg;
     $('testState').className = `save-state ${kind || ''}`;
   }
+
+  $('gasUrl').addEventListener('input', () => {
+    const fp = Storage.urlFingerprint($('gasUrl').value);
+    $('fingerprint').innerHTML = fp
+      ? `주소 확인코드 <b>${fp.code}</b> · 길이 ${fp.length}자 · 끝 8자 <code>${fp.tail}</code>`
+      : '';
+  });
 
   $('btnSave').addEventListener('click', () => {
     const url = $('gasUrl').value.trim();
