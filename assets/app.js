@@ -3,14 +3,18 @@
   'use strict';
 
   const { SECTIONS, SCALE_OPTIONS, ESS_IDS, formatAnswer } = window.SURVEY;
-  const DRAFT_KEY = 'osaq.draft.v1';
+  const DRAFT_KEY = 'osaq.draft.v2';
+  const DRAFT_MAX_AGE = 6 * 60 * 60 * 1000; // 6시간이 지난 작성 중 내용은 자동으로 버린다
   const RESULT_STEP = SECTIONS.length;
 
   const state = {
     step: 0,
-    answers: loadDraft(),
+    answers: {},
     startedAt: new Date().toISOString(),
-    saved: null, // { where: 'server' | 'local', at: ISO }
+    saved: null, // { where: 'sheet' | 'server' | 'queued', at: ISO }
+    // 작성하다 만 내용이 있어도 자동으로 채우지 않는다.
+    // 다음 환자에게 앞 환자의 답이 남아 보이면 안 되므로, 첫 화면에서 이어서 할지 물어본다.
+    resume: loadDraft(),
   };
 
   const el = {
@@ -31,18 +35,38 @@
 
   function loadDraft() {
     try {
+      localStorage.removeItem('osaq.draft.v1'); // 예전 형식은 쓰지 않는다
       const raw = localStorage.getItem(DRAFT_KEY);
-      return raw ? JSON.parse(raw) : {};
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      if (!draft || !draft.answers || !Object.keys(draft.answers).length) return null;
+      if (Date.now() - new Date(draft.updatedAt).getTime() > DRAFT_MAX_AGE) {
+        localStorage.removeItem(DRAFT_KEY);
+        return null;
+      }
+      return draft;
     } catch (_) {
-      return {};
+      return null;
     }
   }
 
   function saveDraft() {
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(state.answers));
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ answers: state.answers, step: state.step, updatedAt: new Date().toISOString() })
+      );
     } catch (_) {
       /* 저장 공간이 없어도 설문 진행에는 영향 없음 */
+    }
+  }
+
+  function clearDraft() {
+    state.resume = null;
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch (_) {
+      /* 무시 */
     }
   }
 
@@ -193,7 +217,7 @@
       if (s.id === 'a1') inner += bmiHintHtml();
     }
 
-    el.app.innerHTML = `<div class="card">
+    el.app.innerHTML = `${state.step === 0 && state.resume ? resumeCardHtml() : ''}<div class="card">
       ${s.no ? `<span class="sec-no">PART A · ${esc(s.no)}</span>` : '<span class="sec-no">시작하기</span>'}
       <h1 class="sec-title">${esc(s.title)}</h1>
       <p class="sec-desc">${esc(s.desc)}</p>
@@ -215,6 +239,24 @@
       const input = focusTarget.matches('input') ? focusTarget : focusTarget.querySelector('input');
       if (input && !errorIds.length) input.focus();
     }
+  }
+
+  /** 작성하다 만 설문이 남아 있을 때, 이어서 할지 새로 할지 직접 고르게 한다 */
+  function resumeCardHtml() {
+    const d = state.resume;
+    const pid = d.answers.patientNo ? `환자번호 ${d.answers.patientNo}` : '환자번호 미입력';
+    const at = formatNow(d.updatedAt);
+    const where = SECTIONS[Math.min(d.step || 0, SECTIONS.length - 1)];
+    return `<div class="card resume">
+      <div class="resume__body">
+        <b>작성하다 만 설문이 있습니다</b>
+        <span>${esc(pid)} · ${esc(where.no ? `PART A ${where.no} ${where.title}` : '시작 화면')}까지 · ${esc(at)}</span>
+      </div>
+      <div class="resume__acts">
+        <button type="button" class="btn" data-act="discard">새 환자로 시작</button>
+        <button type="button" class="btn btn--primary" data-act="resume">이어서 작성</button>
+      </div>
+    </div>`;
   }
 
   function bmiHintHtml() {
@@ -377,6 +419,7 @@
 
   function go(step) {
     state.step = Math.max(0, Math.min(RESULT_STEP, step));
+    if (Object.keys(state.answers).length) saveDraft(); // 이어서 작성할 때 그 자리로 돌아오도록
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -406,7 +449,7 @@
       state.saved = { where: result.where, at: record.submittedAt };
       const place = result.where === 'sheet' ? '구글 시트' : '서버';
       showSaveState(`${place}에 저장되었습니다 · ${formatNow(record.submittedAt)}`, 'ok');
-      localStorage.removeItem(DRAFT_KEY);
+      clearDraft();
     } else {
       // 연결이 끊겨도 결과는 태블릿에 대기열로 남고, 연결되면 자동으로 전송된다.
       state.saved = { where: 'queued', at: record.submittedAt };
@@ -414,7 +457,7 @@
         `연결이 되지 않아 태블릿에 보관했습니다 (전송 대기 ${result.pending}건) · 인터넷이 연결되면 자동으로 전송됩니다`,
         'warn'
       );
-      localStorage.removeItem(DRAFT_KEY);
+      clearDraft();
     }
   }
 
@@ -434,7 +477,7 @@
     state.answers = {};
     state.startedAt = new Date().toISOString();
     state.saved = null;
-    localStorage.removeItem(DRAFT_KEY);
+    clearDraft();
     go(0);
   }
 
@@ -475,6 +518,14 @@
       go(state.step + 1);
     } else if (act === 'prev') {
       go(state.step - 1);
+    } else if (act === 'resume') {
+      state.answers = { ...state.resume.answers };
+      const target = Math.min(state.resume.step || 0, SECTIONS.length - 1);
+      state.resume = null;
+      go(target);
+    } else if (act === 'discard') {
+      clearDraft();
+      render();
     } else if (act === 'save') {
       save();
     } else if (act === 'print') {

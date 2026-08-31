@@ -83,24 +83,143 @@
     };
   }
 
+  /* ── 전송 수단 ───────────────────────────
+   * 브라우저가 구글로 보내는 일반 요청을 막는 환경(파일로 연 페이지, 사내망 정책 등)이 있어
+   * 두 가지 우회 경로를 함께 둔다.
+   *   · 조회: JSONP  — <script> 태그로 불러오므로 차단되지 않는다.
+   *   · 저장: 폼 전송 — 숨긴 iframe으로 보내고, 저장됐는지 JSONP로 확인한다.
+   */
+  function withParams(base, params) {
+    const q = Object.keys(params)
+      .filter((k) => params[k] !== undefined && params[k] !== null && params[k] !== '')
+      .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+      .join('&');
+    return `${base}${base.includes('?') ? '&' : '?'}${q}`;
+  }
+
+  function jsonp(url, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const name = `osaqCb_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
+      const script = document.createElement('script');
+      let settled = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        delete global[name];
+        script.remove();
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('응답 시간이 지났습니다'));
+      }, timeoutMs || 20000);
+      global[name] = (data) => {
+        settled = true;
+        cleanup();
+        resolve(data);
+      };
+      script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('구글에 연결하지 못했습니다'));
+      };
+      script.src = withParams(url, { callback: name });
+      document.head.appendChild(script);
+    });
+  }
+
+  function formPost(url, payload) {
+    return new Promise((resolve) => {
+      const name = `osaqFrame_${Date.now().toString(36)}`;
+      const frame = document.createElement('iframe');
+      frame.name = name;
+      frame.style.display = 'none';
+      const form = document.createElement('form');
+      form.action = url;
+      form.method = 'POST';
+      form.target = name;
+      form.style.display = 'none';
+      const field = document.createElement('input');
+      field.type = 'hidden';
+      field.name = 'payload';
+      field.value = JSON.stringify(payload);
+      form.appendChild(field);
+      document.body.appendChild(frame);
+      document.body.appendChild(form);
+
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        setTimeout(() => {
+          form.remove();
+          frame.remove();
+        }, 500);
+        resolve();
+      };
+      // 다른 사이트로 보내므로 응답 내용은 읽을 수 없다. 전송이 끝나면 확인 요청으로 결과를 본다.
+      frame.addEventListener('load', finish);
+      setTimeout(finish, 8000);
+      form.submit();
+    });
+  }
+
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /** 조회 요청 — 일반 요청이 막히면 JSONP로 다시 시도한다 */
+  async function gasGet(params, cfg) {
+    const target = cfg && cfg.gasUrl ? cfg : getConfig();
+    const url = withParams(target.gasUrl, { ...params, token: target.token || '' });
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`구글 시트 응답 ${res.status}`);
+      const data = await res.json();
+      return { data, via: 'direct' };
+    } catch (err) {
+      const data = await jsonp(url);
+      return { data, via: 'jsonp' };
+    }
+  }
+
   /* Apps Script 웹앱 호출.
    * Content-Type을 text/plain으로 보내면 브라우저가 사전 요청(preflight)을 생략하므로
    * 별도 서버 설정 없이 태블릿에서 바로 저장할 수 있다. */
   async function postToSheet(record) {
+    // 인터넷이 끊긴 상태라면 기다리지 않고 바로 대기열로 보낸다.
+    if (navigator.onLine === false) throw new Error('인터넷에 연결되어 있지 않습니다');
     const { gasUrl } = getConfig();
-    const res = await fetch(gasUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(toSheetPayload(record)),
-      redirect: 'follow',
-    });
-    if (!res.ok) throw new Error(`구글 시트 응답 ${res.status}`);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || '구글 시트가 저장을 거부했습니다');
-    return data;
+    const payload = toSheetPayload(record);
+    try {
+      const res = await fetch(gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        redirect: 'follow',
+      });
+      if (!res.ok) throw new Error(`구글 시트 응답 ${res.status}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || '구글 시트가 저장을 거부했습니다');
+      return data;
+    } catch (err) {
+      // 일반 요청이 막힌 환경 — 폼으로 보낸 뒤 시트에 들어갔는지 확인한다.
+      await formPost(gasUrl, payload);
+      for (let i = 0; i < 3; i++) {
+        await wait(1200);
+        try {
+          const { data } = await gasGet({ action: 'check', clientId: record.clientId });
+          if (data && data.ok && data.found) return { ok: true, row: data.row, via: 'form' };
+          if (data && data.error) throw new Error(data.error);
+        } catch (checkErr) {
+          if (i === 2) throw checkErr;
+        }
+      }
+      throw err;
+    }
   }
 
   async function postToServer(record) {
+    if (navigator.onLine === false) throw new Error('인터넷에 연결되어 있지 않습니다');
     const res = await fetch('api/responses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -172,14 +291,16 @@
   /* 저장된 결과 목록 */
   async function list() {
     const queued = read(QUEUE_KEY, []).map((r) => ({ ...r, _pending: true }));
-    const { gasUrl, token } = getConfig();
+    const { gasUrl } = getConfig();
     try {
-      const url = gasUrl
-        ? `${gasUrl}${gasUrl.includes('?') ? '&' : '?'}action=list&token=${encodeURIComponent(token)}`
-        : 'api/responses';
-      const res = await fetch(url, { redirect: 'follow' });
-      if (!res.ok) throw new Error(String(res.status));
-      const data = await res.json();
+      let data;
+      if (gasUrl) {
+        data = (await gasGet({ action: 'list' })).data;
+      } else {
+        const res = await fetch('api/responses', { redirect: 'follow' });
+        if (!res.ok) throw new Error(String(res.status));
+        data = await res.json();
+      }
       if (data.error) throw new Error(data.error);
       const records = data.records || [];
       const keys = new Set(records.map((r) => r.clientId).filter(Boolean));
@@ -212,14 +333,64 @@
       const data = await res.json();
       return { where: 'server', count: (data.records || []).length };
     }
-    const url = `${target.gasUrl}${target.gasUrl.includes('?') ? '&' : '?'}action=ping&token=${encodeURIComponent(
-      target.token || ''
-    )}`;
-    const res = await fetch(url, { redirect: 'follow' });
-    if (!res.ok) throw new Error(`구글 시트 응답 ${res.status}`);
-    const data = await res.json();
+    const { data, via } = await gasGet({ action: 'ping' }, target);
     if (!data.ok) throw new Error(data.error || '연결에 실패했습니다');
-    return { where: 'sheet', count: data.count, sheetName: data.sheetName, sheetUrl: data.sheetUrl };
+    return { where: 'sheet', via, count: data.count, sheetName: data.sheetName, sheetUrl: data.sheetUrl };
+  }
+
+  /* 어디서 막혔는지 한 단계씩 확인한다 (설정 화면의 '자세히 진단') */
+  async function diagnose(cfg) {
+    const target = cfg && cfg.gasUrl ? cfg : getConfig();
+    const steps = [];
+    const add = (name, ok, detail) => steps.push({ name, ok, detail });
+
+    if (location.protocol === 'file:') {
+      add('페이지 열기 방식', false, '파일로 직접 연 페이지(file://)는 브라우저가 구글 요청을 막습니다. 서버 주소(http://…)로 접속해 주세요.');
+    } else {
+      add('페이지 열기 방식', true, `${location.protocol}//${location.host} 에서 실행 중`);
+    }
+
+    const url = (target.gasUrl || '').trim();
+    if (!url) {
+      add('웹 앱 주소', false, '주소가 비어 있습니다. 배포 후 나온 /exec 주소를 입력해 주세요.');
+      return steps;
+    }
+    if (/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)) {
+      add('웹 앱 주소 형식', true, '올바른 형식입니다');
+    } else {
+      // 형식이 달라도 연결은 시도해 본다 — 어디까지 되는지 보여 주는 편이 도움이 된다.
+      add('웹 앱 주소 형식', false, '보통은 https://script.google.com/macros/s/…/exec 형태입니다. 시트 주소나 /dev(테스트) 주소가 아닌지 확인해 주세요.');
+    }
+
+    // ① 일반 요청
+    let direct = null;
+    try {
+      const res = await fetch(withParams(url, { action: 'ping', token: target.token || '' }), { redirect: 'follow' });
+      direct = await res.json();
+      add('일반 연결', true, `구글이 응답했습니다 (HTTP ${res.status})`);
+    } catch (err) {
+      add('일반 연결', false, `막혔습니다 (${err.message}) — 우회 방식으로 다시 시도합니다`);
+    }
+
+    // ② JSONP 우회
+    let viaJsonp = null;
+    if (!direct) {
+      try {
+        viaJsonp = await jsonp(withParams(url, { action: 'ping', token: target.token || '' }));
+        add('우회 연결', true, '우회 방식으로 구글에 연결했습니다');
+      } catch (err) {
+        add('우회 연결', false, `${err.message} — 배포가 '모든 사용자'로 되어 있는지, 코드 수정 후 '새 버전'으로 다시 배포했는지 확인해 주세요.`);
+        return steps;
+      }
+    }
+
+    const data = direct || viaJsonp;
+    if (data && data.ok) {
+      add('암호(토큰)', true, `일치합니다 · 시트 "${data.sheetName}"에 ${data.count}건 저장됨`);
+    } else {
+      add('암호(토큰)', false, (data && data.error) || '구글이 요청을 거부했습니다');
+    }
+    return steps;
   }
 
   // 앱이 열릴 때, 그리고 인터넷이 다시 연결될 때 대기열을 자동으로 비운다.
@@ -230,5 +401,8 @@
     }, 1500);
   }
 
-  global.Storage = { getConfig, setConfig, useSheet, save, flush, list, test, pendingCount, sheetColumns, localTime, newClientId };
+  global.Storage = {
+    getConfig, setConfig, useSheet, save, flush, list, test, diagnose,
+    pendingCount, sheetColumns, localTime, newClientId,
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

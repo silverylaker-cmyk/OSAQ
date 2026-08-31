@@ -29,7 +29,7 @@ function doPost(e) {
   }
 
   try {
-    var payload = JSON.parse(e.postData.contents);
+    var payload = readPayload(e);
     if (payload.token !== TOKEN) return json({ ok: false, error: '암호(토큰)가 올바르지 않습니다.' });
 
     var record = payload.record || {};
@@ -61,7 +61,10 @@ function doPost(e) {
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
-  if (params.token !== TOKEN) return json({ ok: false, error: '암호(토큰)가 올바르지 않습니다.' });
+  // callback 이 오면 JSONP로 답합니다. 브라우저가 일반 요청(CORS)을 막는 환경에서도 연결됩니다.
+  var cb = /^[A-Za-z0-9_]{1,64}$/.test(params.callback || '') ? params.callback : '';
+
+  if (params.token !== TOKEN) return json({ ok: false, error: '암호(토큰)가 올바르지 않습니다.' }, cb);
 
   var sheet = getSheet();
   var action = params.action || 'ping';
@@ -72,14 +75,23 @@ function doGet(e) {
       count: Math.max(0, sheet.getLastRow() - 1),
       sheetName: sheet.getName(),
       sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
-    });
+    }, cb);
   }
 
   if (action === 'list') {
-    return json({ ok: true, records: readRecords(sheet) });
+    return json({ ok: true, records: readRecords(sheet) }, cb);
   }
 
-  return json({ ok: false, error: '알 수 없는 요청입니다: ' + action });
+  // 폼 방식으로 보낸 결과가 시트에 들어갔는지 확인할 때 씁니다.
+  if (action === 'check') {
+    var headers = sheet.getLastRow() > 0
+      ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String)
+      : [];
+    var found = findRowByClientId(sheet, headers, params.clientId || '');
+    return json({ ok: true, found: found > 0, row: found }, cb);
+  }
+
+  return json({ ok: false, error: '알 수 없는 요청입니다: ' + action }, cb);
 }
 
 /* ── 내부 함수 ─────────────────────────────── */
@@ -146,6 +158,19 @@ function readRecords(sheet) {
   return out;
 }
 
-function json(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+/** 설문 프로그램이 보낸 내용을 읽습니다. 일반 전송과 폼 전송을 모두 지원합니다. */
+function readPayload(e) {
+  if (e && e.parameter && e.parameter.payload) return JSON.parse(e.parameter.payload);
+  if (e && e.postData && e.postData.contents) return JSON.parse(e.postData.contents);
+  throw new Error('전송된 내용이 없습니다.');
+}
+
+function json(obj, callback) {
+  var text = JSON.stringify(obj);
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + text + ');').setMimeType(
+      ContentService.MimeType.JAVASCRIPT
+    );
+  }
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
 }

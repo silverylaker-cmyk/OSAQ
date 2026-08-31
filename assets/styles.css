@@ -257,6 +257,32 @@ button, input, select { font: inherit; color: inherit; }
 .save-state.is-ok { color: var(--ok); }
 .save-state.is-err { color: var(--danger); }
 .save-state.is-warn { color: var(--warn); }
+
+/* 작성하다 만 설문 안내 */
+.resume {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 18px 22px; margin-bottom: 16px;
+  border: 1.5px solid #f2d49b; background: var(--warn-soft);
+}
+.resume__body { display: grid; gap: 2px; flex: 1 1 260px; }
+.resume__body b { font-size: 16px; color: var(--warn); }
+.resume__body span { font-size: 14px; color: var(--ink-2); }
+.resume__acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.resume__acts .btn { min-height: 48px; padding: 0 18px; }
+
+/* 연결 진단 결과 */
+.diag { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.diag__item {
+  display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start;
+  padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fbfcfe;
+  font-size: 14.5px; line-height: 1.6;
+}
+.diag__item.is-ok { border-color: #b9e3d5; background: #f2faf7; }
+.diag__item.is-err { border-color: #f2d49b; background: var(--warn-soft); }
+.diag__mark { font-weight: 800; }
+.diag__item.is-ok .diag__mark { color: var(--ok); }
+.diag__item.is-err .diag__mark { color: var(--warn); }
+.diag__detail { color: var(--ink-2); }
 .save-state a { color: var(--brand); }
 
 .disclaimer {

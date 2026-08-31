@@ -42,7 +42,8 @@
     try {
       const r = await Storage.test({ gasUrl: $('gasUrl').value.trim(), token: $('token').value.trim() });
       if (r.where === 'sheet') {
-        state(`연결 성공 · 시트 "${r.sheetName}"에 ${r.count}건이 저장되어 있습니다`, 'is-ok');
+        const via = r.via === 'jsonp' ? ' (우회 연결 사용)' : '';
+        state(`연결 성공${via} · 시트 "${r.sheetName}"에 ${r.count}건이 저장되어 있습니다`, 'is-ok');
         if (r.sheetUrl) {
           $('testState').insertAdjacentHTML('beforeend', ` · <a href="${r.sheetUrl}" target="_blank" rel="noopener">시트 열기</a>`);
         }
@@ -50,9 +51,29 @@
         state(`병원 서버 연결 성공 · ${r.count}건이 저장되어 있습니다`, 'is-ok');
       }
     } catch (err) {
-      state(`연결 실패: ${err.message} — 주소·토큰과 배포 설정(액세스 권한 '모든 사용자')을 확인해 주세요.`, 'is-err');
+      state(`연결 실패: ${err.message}`, 'is-err');
+      $('testState').insertAdjacentHTML('beforeend', ' · <b>아래 [자세히 진단]</b>을 눌러 어디서 막혔는지 확인해 주세요.');
+      runDiagnose();
     }
   });
+
+  /* 어디서 막혔는지 단계별로 보여 준다 */
+  async function runDiagnose() {
+    const box = $('diagnose');
+    box.hidden = false;
+    box.innerHTML = '<div class="save-state">진단 중…</div>';
+    const steps = await Storage.diagnose({ gasUrl: $('gasUrl').value.trim(), token: $('token').value.trim() });
+    box.innerHTML = `<ol class="diag">${steps
+      .map(
+        (s) => `<li class="diag__item ${s.ok ? 'is-ok' : 'is-err'}">
+          <span class="diag__mark">${s.ok ? '✓' : '✕'}</span>
+          <span><b>${s.name}</b><br><span class="diag__detail">${s.detail}</span></span>
+        </li>`
+      )
+      .join('')}</ol>`;
+  }
+
+  $('btnDiagnose').addEventListener('click', runDiagnose);
 
   $('btnClear').addEventListener('click', () => {
     if (!confirm('구글 시트 연결을 해제하고 병원 서버 저장으로 되돌릴까요?')) return;
