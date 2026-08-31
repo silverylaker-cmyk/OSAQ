@@ -25,7 +25,8 @@ var ID_HEADER = '기록번호';
  *
  * Apps Script 편집기 위쪽 함수 목록에서 approveAndTest 를 고르고 ▷실행 을 누르세요.
  *   · 승인 창이 뜨면 계정 선택 → "확인되지 않았습니다" 화면에서 고급 › 이동 › 허용
- *   · 아래쪽 실행 로그에 "준비 완료" 가 찍히면 승인과 설정이 끝난 것입니다.
+ *   · 빨간 오류 메시지 없이 "실행이 완료됨" 으로 끝나면 승인과 시트 접근이 정상입니다.
+ *   · 자세한 내용은 왼쪽 메뉴의 '실행'(⏱) 기록에서 볼 수 있습니다.
  * 승인을 마친 뒤에는 배포 › 배포 관리 › ✏️ › 버전 '새 버전' › 배포 로 다시 배포하세요.
  */
 function approveAndTest() {
@@ -35,7 +36,9 @@ function approveAndTest() {
   var message =
     '준비 완료 — 스프레드시트 "' + name + '" · 시트 "' + sheet.getName() + '" · 저장된 결과 ' + rows + '건' +
     ' · 암호(TOKEN) "' + TOKEN + '"';
+  // 편집기 버전에 따라 로그가 보이는 위치가 다르므로 두 가지로 모두 남깁니다.
   Logger.log(message);
+  console.log(message);
   return message;
 }
 
