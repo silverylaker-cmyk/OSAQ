@@ -167,6 +167,29 @@
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  /* 웹 앱 주소는 계정 종류에 따라 두 가지 형태가 있다.
+   *   개인 계정   https://script.google.com/macros/s/<ID>/exec
+   *   조직(회사·병원) 계정  https://script.google.com/a/macros/<도메인>/s/<ID>/exec
+   */
+  const GAS_EXEC = /^https:\/\/script\.google\.com\/(macros\/s\/[^/]+|a\/macros\/[^/]+\/s\/[^/]+)\/exec$/;
+
+  /** 주소가 잘못됐다면 무엇이 잘못됐는지 알려 준다 (정상이면 null) */
+  function urlProblem(input) {
+    const url = (input || '').trim();
+    if (!url) return '주소가 비어 있습니다. 배포 후 나온 웹 앱 주소를 입력해 주세요.';
+    if (GAS_EXEC.test(url)) return null;
+    if (/docs\.google\.com\/spreadsheets/.test(url))
+      return '이건 <b>구글 시트 주소</b>입니다. 필요한 것은 Apps Script에서 <b>배포</b>한 뒤 나오는 웹 앱 주소입니다.';
+    if (/script\.google\.com\/(home|u\/\d+\/home)/.test(url) || /\/edit(\?|#|$)/.test(url))
+      return '이건 <b>Apps Script 편집기 주소</b>입니다. 배포 › 새 배포 › 웹 앱 을 마친 뒤 나오는 주소를 넣어 주세요.';
+    if (/\/dev$/.test(url))
+      return '<b>/dev 로 끝나는 테스트 주소</b>입니다. 이 주소는 본인만 열 수 있어 태블릿에서는 동작하지 않습니다. <b>/exec</b> 로 끝나는 주소를 넣어 주세요.';
+    if (!/^https:\/\/script\.google\.com\//.test(url))
+      return '<b>script.google.com</b> 으로 시작하는 주소가 아닙니다. 배포 후 나온 웹 앱 주소를 다시 복사해 주세요.';
+    if (!/\/exec$/.test(url)) return '주소가 <b>/exec</b> 로 끝나야 합니다. 뒤에 붙은 글자가 없는지 확인해 주세요.';
+    return '주소 형태가 예상과 다릅니다. 배포 후 나온 웹 앱 주소를 그대로 복사해 주세요.';
+  }
+
   /** 조회 요청 — 일반 요청이 막히면 JSONP로 다시 시도한다 */
   async function gasGet(params, cfg) {
     const target = cfg && cfg.gasUrl ? cfg : getConfig();
@@ -355,11 +378,12 @@
       add('웹 앱 주소', false, '주소가 비어 있습니다. 배포 후 나온 /exec 주소를 입력해 주세요.');
       return steps;
     }
-    if (/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)) {
-      add('웹 앱 주소 형식', true, '올바른 형식입니다');
+    const problem = urlProblem(url);
+    if (!problem) {
+      add('웹 앱 주소 형식', true, url.includes('/a/macros/') ? '올바른 형식입니다 (조직 계정 주소)' : '올바른 형식입니다');
     } else {
       // 형식이 달라도 연결은 시도해 본다 — 어디까지 되는지 보여 주는 편이 도움이 된다.
-      add('웹 앱 주소 형식', false, '보통은 https://script.google.com/macros/s/…/exec 형태입니다. 시트 주소나 /dev(테스트) 주소가 아닌지 확인해 주세요.');
+      add('웹 앱 주소 형식', false, problem);
     }
 
     const pingUrl = withParams(url, { action: 'ping', token: target.token || '' });
@@ -434,7 +458,7 @@
   }
 
   global.Storage = {
-    getConfig, setConfig, useSheet, save, flush, list, test, diagnose, pingUrl,
+    getConfig, setConfig, useSheet, save, flush, list, test, diagnose, pingUrl, urlProblem,
     pendingCount, sheetColumns, localTime, newClientId,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

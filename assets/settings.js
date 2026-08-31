@@ -28,12 +28,14 @@
 
   $('btnSave').addEventListener('click', () => {
     const url = $('gasUrl').value.trim();
-    if (url && !/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) {
-      state('주소가 올바르지 않습니다. Apps Script 배포 URL은 https://script.google.com/... 으로 시작하고 /exec 으로 끝납니다.', 'is-err');
-      return;
-    }
+    const problem = url ? Storage.urlProblem(url) : null;
+    // 주소가 예상과 달라도 일단 저장은 한다. 형태만 다르고 동작하는 경우가 있기 때문이다.
     Storage.setConfig({ gasUrl: url, token: $('token').value });
-    state('저장했습니다. 연결 테스트로 확인해 보세요.', 'is-ok');
+    if (problem) {
+      $('testState').innerHTML = `<span class="save-state is-warn">저장했지만 주소를 확인해 주세요 — ${problem}</span>`;
+    } else {
+      state('저장했습니다. 연결 테스트로 확인해 보세요.', 'is-ok');
+    }
     refresh();
   });
 
